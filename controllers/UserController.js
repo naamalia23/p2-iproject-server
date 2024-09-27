@@ -1,6 +1,8 @@
 const { hashPassword, compareHash } = require("../helpers/bcrypt");
 const { createToken, verifyToken } = require("../helpers/jwt");
 const { User } = require("../models");
+const { OAuth2Client } = require("google-auth-library");
+
 
 class UserController {
   static async register(req, res, next) {
@@ -64,6 +66,43 @@ class UserController {
       });
     } catch (err) {
       next(err);
+    }
+  }
+
+  static async googleSignIn(req, res, next) {
+    try {
+      const { token_google } = req.headers;
+
+      const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+      const ticket = await client.verifyIdToken({
+        idToken: token_google,
+        audience: process.env.GOOGLE_CLIENT_ID, // Specify the CLIENT_ID of the app that accesses the backend
+      });
+      const payload = ticket.getPayload();
+
+      const [user, created] = await User.findOrCreate({
+        where: {
+          email: payload.email,
+        },
+        defaults: {
+          email: payload.email,
+          password: "ini_dari_google",
+        },
+        hooks: false,
+      });
+
+      const access_token = createToken({
+        id: user.id,
+      });
+
+      res.status(200).json({
+        access_token,
+        email: user.email,
+        id: user.id,
+      });
+    } catch (error) {
+      next(error);
+      console.log(error);
     }
   }
 }
